@@ -103,6 +103,6 @@ process_btn = tk.Button(root,
 process_btn.pack(pady=15)
 
 # 版权信息
-tk.Label(root, text="© 2024 频道提取工具 | 版本 1.1", fg="gray").pack(side=tk.BOTTOM)
+tk.Label(root, text="Deepseek生成", fg="gray").pack(side=tk.BOTTOM)
 
 root.mainloop()
