@@ -1,108 +1,297 @@
 import re
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
+import threading
+import os
 
-def extract_channels(jsp_content):
-    """从JSP内容中提取频道信息（处理到.smil为止）"""
-    # 匹配ChannelName和TimeShiftURL，忽略问号后的参数
-    pattern = r"Authentication\.CUSetConfig\(.*?ChannelName=\"(.*?)\".*?TimeShiftURL=\"([^?\"]*)"
-    matches = re.findall(pattern, jsp_content, re.DOTALL)
-    
-    # 处理结果确保.smil完整性
-    processed = []
-    for name, url in matches:
-        # 找到最后一个.smil的位置
-        smil_index = url.rfind(".smil")
-        if smil_index != -1:
-            clean_url = url[:smil_index+5]  # +5保留.smil
-        else:
-            clean_url = url  # 如果没有.smil则保留原URL
-        processed.append(f"{name},{clean_url}")
-    
-    return processed
-
-def select_input_file():
-    """选择输入文件"""
-    file_path = filedialog.askopenfilename(
-        title="选择JSP文件",
-        filetypes=[("JSP文件", "*.jsp"), ("所有文件", "*.*")]
-    )
-    input_entry.delete(0, tk.END)
-    input_entry.insert(0, file_path)
-
-def select_output_file():
-    """选择输出文件"""
-    file_path = filedialog.asksaveasfilename(
-        title="保存CSV文件",
-        defaultextension=".csv",
-        filetypes=[("CSV文件", "*.csv"), ("所有文件", "*.*")]
-    )
-    output_entry.delete(0, tk.END)
-    output_entry.insert(0, file_path)
-
-def process_files():
-    """处理文件主逻辑"""
-    input_path = input_entry.get()
-    output_path = output_entry.get()
-    
-    if not input_path or not output_path:
-        messagebox.showerror("错误", "请先选择输入和输出文件")
-        return
-    
-    try:
-        # 读取文件内容
-        with open(input_path, "r", encoding="utf-8") as f:
-            content = f.read()
+class IPTVExtractor:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("IPTV频道提取工具")
+        self.root.geometry("700x500")
+        # 设置最小窗口尺寸，确保所有元素可见
+        self.root.minsize(650, 600)
+        self.root.resizable(True, True)
         
-        # 提取频道信息
-        results = extract_channels(content)
+        # 设置主题颜色
+        self.primary_color = "#4CAF50"
+        self.bg_color = "#f5f5f5"
+        self.root.configure(bg=self.bg_color)
         
-        # 保存为CSV（使用utf-8-sig解决Excel乱码问题）
-        with open(output_path, "w", encoding="utf-8-sig") as f:
-            f.write("频道名称,播放地址\n")  # 添加标题行
-            f.write("\n".join(results))
+        self.create_widgets()
         
-        # 显示处理结果
-        info = f"成功提取 {len(results)} 条记录\n示例数据：\n" + "\n".join(results[:3])
-        messagebox.showinfo("处理完成", info)
+    def create_widgets(self):
+        """创建界面组件"""
+        # 创建标题
+        title_frame = tk.Frame(self.root, bg=self.bg_color)
+        title_frame.pack(pady=10, fill=tk.X)
         
-    except Exception as e:
-        messagebox.showerror("错误", f"处理失败：\n{str(e)}")
+        title_label = tk.Label(
+            title_frame, 
+            text="IPTV频道提取工具", 
+            font=("Arial", 16, "bold"),
+            bg=self.bg_color,
+            fg=self.primary_color
+        )
+        title_label.pack()
+        
+        # 创建主框架
+        main_frame = tk.Frame(self.root, bg=self.bg_color)
+        main_frame.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
+        
+        # 输入文件区域
+        input_frame = tk.LabelFrame(main_frame, text="输入设置", bg=self.bg_color, padx=10, pady=10)
+        input_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(input_frame, text="输入文件：", bg=self.bg_color).grid(row=0, column=0, sticky=tk.W)
+        self.input_entry = tk.Entry(input_frame, width=50)
+        self.input_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
+        
+        input_btn = ttk.Button(input_frame, text="选择文件", command=self.select_input_file)
+        input_btn.grid(row=0, column=2, padx=5)
+        
+        # 输出文件区域
+        output_frame = tk.LabelFrame(main_frame, text="输出设置", bg=self.bg_color, padx=10, pady=10)
+        output_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(output_frame, text="输出文件：", bg=self.bg_color).grid(row=0, column=0, sticky=tk.W)
+        self.output_entry = tk.Entry(output_frame, width=50)
+        self.output_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
+        
+        output_btn = ttk.Button(output_frame, text="选择路径", command=self.select_output_file)
+        output_btn.grid(row=0, column=2, padx=5)
+        
+        # 配置列权重
+        input_frame.columnconfigure(1, weight=1)
+        output_frame.columnconfigure(1, weight=1)
+        
+        # 选项区域
+        options_frame = tk.LabelFrame(main_frame, text="提取选项", bg=self.bg_color, padx=10, pady=10)
+        options_frame.pack(fill=tk.X, pady=5)
+        
+        self.extract_smil_var = tk.BooleanVar(value=True)
+        smil_check = tk.Checkbutton(
+            options_frame, 
+            text="提取.smil格式地址", 
+            variable=self.extract_smil_var,
+            bg=self.bg_color
+        )
+        smil_check.grid(row=0, column=0, sticky=tk.W)
+        
+        self.extract_m3u8_var = tk.BooleanVar(value=True)
+        m3u8_check = tk.Checkbutton(
+            options_frame, 
+            text="提取.m3u8格式地址", 
+            variable=self.extract_m3u8_var,
+            bg=self.bg_color
+        )
+        m3u8_check.grid(row=0, column=1, sticky=tk.W)
+        
+        # 进度条
+        progress_frame = tk.Frame(main_frame, bg=self.bg_color)
+        progress_frame.pack(fill=tk.X, pady=10)
+        
+        self.progress = ttk.Progressbar(progress_frame, orient="horizontal", length=100, mode="determinate")
+        self.progress.pack(fill=tk.X)
+        
+        self.status_var = tk.StringVar(value="准备就绪")
+        status_label = tk.Label(progress_frame, textvariable=self.status_var, bg=self.bg_color)
+        status_label.pack(pady=5)
+        
+        # 结果显示区域
+        result_frame = tk.LabelFrame(main_frame, text="提取结果", bg=self.bg_color, padx=10, pady=10)
+        result_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        self.result_text = tk.Text(result_frame, height=5, wrap=tk.WORD)
+        self.result_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        scrollbar = ttk.Scrollbar(result_frame, command=self.result_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.result_text.config(yscrollcommand=scrollbar.set)
+        
+        # 按钮区域
+        button_frame = tk.Frame(main_frame, bg=self.bg_color)
+        button_frame.pack(pady=10)
+        
+        self.process_btn = ttk.Button(
+            button_frame, 
+            text="开始提取", 
+            command=self.start_processing,
+            style="Accent.TButton"
+        )
+        self.process_btn.pack(side=tk.LEFT, padx=5)
+        
+        clear_btn = ttk.Button(
+            button_frame, 
+            text="清空结果", 
+            command=self.clear_results
+        )
+        clear_btn.pack(side=tk.LEFT, padx=5)
+        
+        # 设置按钮样式
+        style = ttk.Style()
+        style.configure("Accent.TButton", foreground="white", background=self.primary_color)
+        
+        # 版权信息
+        footer_frame = tk.Frame(self.root, bg=self.bg_color)
+        footer_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+        
+        version_label = tk.Label(
+            footer_frame, 
+            text="版本 1.1.0 | 由Trae AI优化", 
+            fg="gray",
+            bg=self.bg_color
+        )
+        version_label.pack(side=tk.RIGHT, padx=10)
+    
+    def select_input_file(self):
+        """选择输入文件"""
+        file_path = filedialog.askopenfilename(
+            title="选择JSP文件",
+            filetypes=[("JSP文件", "*.jsp"), ("文本文件", "*.txt"), ("所有文件", "*.*")]
+        )
+        if file_path:
+            self.input_entry.delete(0, tk.END)
+            self.input_entry.insert(0, file_path)
+            
+            # 自动设置默认输出文件名（基于输入文件名）
+            input_filename = os.path.basename(file_path)
+            input_name = os.path.splitext(input_filename)[0]
+            output_dir = os.path.dirname(file_path)
+            default_output = os.path.join(output_dir, f"{input_name}_提取结果.csv")
+            
+            self.output_entry.delete(0, tk.END)
+            self.output_entry.insert(0, default_output)
+    
+    def select_output_file(self):
+        """选择输出文件"""
+        file_path = filedialog.asksaveasfilename(
+            title="保存CSV文件",
+            defaultextension=".csv",
+            filetypes=[("CSV文件", "*.csv"), ("文本文件", "*.txt"), ("所有文件", "*.*")]
+        )
+        if file_path:
+            self.output_entry.delete(0, tk.END)
+            self.output_entry.insert(0, file_path)
+    
+    def extract_channels(self, content):
+        """从内容中提取频道信息"""
+        results = []
+        
+        # 提取ChannelName和TimeShiftURL
+        pattern = r"Authentication\.CUSetConfig\(.*?ChannelName=\"(.*?)\".*?TimeShiftURL=\"([^\"]*)"
+        matches = re.findall(pattern, content, re.DOTALL)
+        
+        # 处理匹配结果
+        for name, url in matches:
+            # 根据用户选择的格式进行处理
+            if self.extract_smil_var.get() and ".smil" in url:
+                smil_index = url.rfind(".smil")
+                if smil_index != -1:
+                    clean_url = url[:smil_index+5]  # +5保留.smil
+                    results.append(f"{name},{clean_url}")
+            
+            if self.extract_m3u8_var.get() and ".m3u8" in url:
+                m3u8_index = url.rfind(".m3u8")
+                if m3u8_index != -1:
+                    clean_url = url[:m3u8_index+5]  # +5保留.m3u8
+                    results.append(f"{name},{clean_url}")
+            
+            # 如果两种格式都没选，或URL中没有这两种格式，则保留原URL
+            if (not self.extract_smil_var.get() and not self.extract_m3u8_var.get()) or \
+               (not ".smil" in url and not ".m3u8" in url):
+                results.append(f"{name},{url}")
+        
+        return results
+    
+    def start_processing(self):
+        """在新线程中启动处理"""
+        self.process_btn.config(state=tk.DISABLED)
+        self.status_var.set("正在处理...")
+        self.progress["value"] = 0
+        
+        # 启动新线程处理文件
+        threading.Thread(target=self.process_files, daemon=True).start()
+    
+    def process_files(self):
+        """处理文件主逻辑"""
+        input_path = self.input_entry.get()
+        output_path = self.output_entry.get()
+        
+        if not input_path or not output_path:
+            self.show_error("请先选择输入和输出文件")
+            return
+        
+        try:
+            # 读取文件内容
+            with open(input_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            
+            self.progress["value"] = 30
+            self.root.update_idletasks()
+            
+            # 提取频道信息
+            results = self.extract_channels(content)
+            
+            self.progress["value"] = 60
+            self.root.update_idletasks()
+            
+            if not results:
+                self.show_error("未找到任何频道信息")
+                return
+            
+            # 保存为CSV（使用utf-8-sig解决Excel乱码问题）
+            with open(output_path, "w", encoding="utf-8-sig") as f:
+                f.write("频道名称,播放地址\n")  # 添加标题行
+                f.write("\n".join(results))
+            
+            self.progress["value"] = 100
+            self.root.update_idletasks()
+            
+            # 显示处理结果
+            self.show_results(results)
+            
+        except Exception as e:
+            self.show_error(f"处理失败：\n{str(e)}")
+        finally:
+            self.process_btn.config(state=tk.NORMAL)
+            self.status_var.set(f"处理完成，共提取 {len(results) if 'results' in locals() else 0} 条记录")
+    
+    def show_results(self, results):
+        """在结果区域显示提取结果"""
+        self.result_text.delete(1.0, tk.END)
+        
+        # 显示统计信息
+        self.result_text.insert(tk.END, f"成功提取 {len(results)} 条记录\n\n")
+        
+        # 显示前5条记录作为示例
+        self.result_text.insert(tk.END, "示例数据：\n")
+        for i, result in enumerate(results[:5]):
+            self.result_text.insert(tk.END, f"{i+1}. {result}\n")
+        
+        # 如果有更多记录，显示省略信息
+        if len(results) > 5:
+            self.result_text.insert(tk.END, f"\n... 还有 {len(results)-5} 条记录\n")
+        
+        # 显示输出文件路径
+        self.result_text.insert(tk.END, f"\n完整数据已保存至：\n{self.output_entry.get()}")
+    
+    def show_error(self, message):
+        """显示错误信息"""
+        messagebox.showerror("错误", message)
+        self.status_var.set("处理出错")
+        self.process_btn.config(state=tk.NORMAL)
+    
+    def clear_results(self):
+        """清空结果区域"""
+        self.result_text.delete(1.0, tk.END)
+        self.progress["value"] = 0
+        self.status_var.set("准备就绪")
+    
+    def run(self):
+        """运行应用程序"""
+        self.root.mainloop()
 
-# 创建主窗口
-root = tk.Tk()
-root.title("电视频道提取工具")
-root.geometry("680x220")
-
-# 输入文件区域
-input_frame = tk.Frame(root)
-input_frame.pack(pady=10)
-
-tk.Label(input_frame, text="输入文件：", width=10).pack(side=tk.LEFT)
-input_entry = tk.Entry(input_frame, width=50)
-input_entry.pack(side=tk.LEFT, padx=5)
-tk.Button(input_frame, text="选择文件", command=select_input_file).pack(side=tk.LEFT)
-
-# 输出文件区域
-output_frame = tk.Frame(root)
-output_frame.pack(pady=10)
-
-tk.Label(output_frame, text="输出文件：", width=10).pack(side=tk.LEFT)
-output_entry = tk.Entry(output_frame, width=50)
-output_entry.pack(side=tk.LEFT, padx=5)
-tk.Button(output_frame, text="选择路径", command=select_output_file).pack(side=tk.LEFT)
-
-# 处理按钮
-process_btn = tk.Button(root, 
-                       text="开始提取", 
-                       command=process_files,
-                       bg="#4CAF50",
-                       fg="white",
-                       height=2,
-                       width=15)
-process_btn.pack(pady=15)
-
-# 版权信息
-tk.Label(root, text="由Deepseek生成", fg="gray").pack(side=tk.BOTTOM)
-
-root.mainloop()
+if __name__ == "__main__":
+    app = IPTVExtractor()
+    app.run()
