@@ -11,12 +11,14 @@ class IPTVExtractor:
         self.root.geometry("700x500")
         # 设置最小窗口尺寸，确保所有元素可见
         self.root.minsize(650, 600)
-        self.root.resizable(True, True)
         
         # 设置主题颜色
         self.primary_color = "#4CAF50"
         self.bg_color = "#f5f5f5"
         self.root.configure(bg=self.bg_color)
+        
+        # 预编译正则表达式提高性能
+        self.channel_pattern = re.compile(r"Authentication\.CUSetConfig\(.*?ChannelName=\"(.*?)\".*?TimeShiftURL=\"([^\"]*)", re.DOTALL)
         
         self.create_widgets()
         
@@ -26,14 +28,13 @@ class IPTVExtractor:
         title_frame = tk.Frame(self.root, bg=self.bg_color)
         title_frame.pack(pady=10, fill=tk.X)
         
-        title_label = tk.Label(
+        tk.Label(
             title_frame, 
             text="IPTV频道提取工具", 
             font=("Arial", 16, "bold"),
             bg=self.bg_color,
             fg=self.primary_color
-        )
-        title_label.pack()
+        ).pack()
         
         # 创建主框架
         main_frame = tk.Frame(self.root, bg=self.bg_color)
@@ -47,8 +48,7 @@ class IPTVExtractor:
         self.input_entry = tk.Entry(input_frame, width=50)
         self.input_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
         
-        input_btn = ttk.Button(input_frame, text="选择文件", command=self.select_input_file)
-        input_btn.grid(row=0, column=2, padx=5)
+        ttk.Button(input_frame, text="选择文件", command=self.select_input_file).grid(row=0, column=2, padx=5)
         
         # 输出文件区域
         output_frame = tk.LabelFrame(main_frame, text="输出设置", bg=self.bg_color, padx=10, pady=10)
@@ -58,8 +58,7 @@ class IPTVExtractor:
         self.output_entry = tk.Entry(output_frame, width=50)
         self.output_entry.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
         
-        output_btn = ttk.Button(output_frame, text="选择路径", command=self.select_output_file)
-        output_btn.grid(row=0, column=2, padx=5)
+        ttk.Button(output_frame, text="选择路径", command=self.select_output_file).grid(row=0, column=2, padx=5)
         
         # 配置列权重
         input_frame.columnconfigure(1, weight=1)
@@ -70,33 +69,30 @@ class IPTVExtractor:
         options_frame.pack(fill=tk.X, pady=5)
         
         self.extract_smil_var = tk.BooleanVar(value=True)
-        smil_check = tk.Checkbutton(
+        tk.Checkbutton(
             options_frame, 
             text="提取.smil格式地址", 
             variable=self.extract_smil_var,
             bg=self.bg_color
-        )
-        smil_check.grid(row=0, column=0, sticky=tk.W)
+        ).grid(row=0, column=0, sticky=tk.W)
         
         self.extract_m3u8_var = tk.BooleanVar(value=True)
-        m3u8_check = tk.Checkbutton(
+        tk.Checkbutton(
             options_frame, 
             text="提取.m3u8格式地址", 
             variable=self.extract_m3u8_var,
             bg=self.bg_color
-        )
-        m3u8_check.grid(row=0, column=1, sticky=tk.W)
+        ).grid(row=0, column=1, sticky=tk.W)
         
         # 进度条
         progress_frame = tk.Frame(main_frame, bg=self.bg_color)
         progress_frame.pack(fill=tk.X, pady=10)
         
-        self.progress = ttk.Progressbar(progress_frame, orient="horizontal", length=100, mode="determinate")
+        self.progress = ttk.Progressbar(progress_frame, orient="horizontal", mode="determinate")
         self.progress.pack(fill=tk.X)
         
         self.status_var = tk.StringVar(value="准备就绪")
-        status_label = tk.Label(progress_frame, textvariable=self.status_var, bg=self.bg_color)
-        status_label.pack(pady=5)
+        tk.Label(progress_frame, textvariable=self.status_var, bg=self.bg_color).pack(pady=5)
         
         # 结果显示区域
         result_frame = tk.LabelFrame(main_frame, text="提取结果", bg=self.bg_color, padx=10, pady=10)
@@ -113,6 +109,10 @@ class IPTVExtractor:
         button_frame = tk.Frame(main_frame, bg=self.bg_color)
         button_frame.pack(pady=10)
         
+        # 设置按钮样式
+        style = ttk.Style()
+        style.configure("Accent.TButton", foreground="white", background=self.primary_color)
+        
         self.process_btn = ttk.Button(
             button_frame, 
             text="开始提取", 
@@ -121,28 +121,22 @@ class IPTVExtractor:
         )
         self.process_btn.pack(side=tk.LEFT, padx=5)
         
-        clear_btn = ttk.Button(
+        ttk.Button(
             button_frame, 
             text="清空结果", 
             command=self.clear_results
-        )
-        clear_btn.pack(side=tk.LEFT, padx=5)
-        
-        # 设置按钮样式
-        style = ttk.Style()
-        style.configure("Accent.TButton", foreground="white", background=self.primary_color)
+        ).pack(side=tk.LEFT, padx=5)
         
         # 版权信息
         footer_frame = tk.Frame(self.root, bg=self.bg_color)
         footer_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
         
-        version_label = tk.Label(
+        tk.Label(
             footer_frame, 
-            text="版本 1.1.0 | 由Trae AI优化", 
+            text="版本 1.2.0 | 由Trae AI优化", 
             fg="gray",
             bg=self.bg_color
-        )
-        version_label.pack(side=tk.RIGHT, padx=10)
+        ).pack(side=tk.RIGHT, padx=10)
     
     def select_input_file(self):
         """选择输入文件"""
@@ -155,8 +149,7 @@ class IPTVExtractor:
             self.input_entry.insert(0, file_path)
             
             # 自动设置默认输出文件名（基于输入文件名）
-            input_filename = os.path.basename(file_path)
-            input_name = os.path.splitext(input_filename)[0]
+            input_name = os.path.splitext(os.path.basename(file_path))[0]
             output_dir = os.path.dirname(file_path)
             default_output = os.path.join(output_dir, f"{input_name}_提取结果.csv")
             
@@ -177,29 +170,32 @@ class IPTVExtractor:
     def extract_channels(self, content):
         """从内容中提取频道信息"""
         results = []
+        extract_smil = self.extract_smil_var.get()
+        extract_m3u8 = self.extract_m3u8_var.get()
         
-        # 提取ChannelName和TimeShiftURL
-        pattern = r"Authentication\.CUSetConfig\(.*?ChannelName=\"(.*?)\".*?TimeShiftURL=\"([^\"]*)"
-        matches = re.findall(pattern, content, re.DOTALL)
+        # 使用预编译的正则表达式提高性能
+        matches = self.channel_pattern.findall(content)
         
         # 处理匹配结果
         for name, url in matches:
+            added = False
+            
             # 根据用户选择的格式进行处理
-            if self.extract_smil_var.get() and ".smil" in url:
+            if extract_smil and ".smil" in url:
                 smil_index = url.rfind(".smil")
                 if smil_index != -1:
-                    clean_url = url[:smil_index+5]  # +5保留.smil
-                    results.append(f"{name},{clean_url}")
+                    results.append(f"{name},{url[:smil_index+5]}")
+                    added = True
             
-            if self.extract_m3u8_var.get() and ".m3u8" in url:
+            if extract_m3u8 and ".m3u8" in url:
                 m3u8_index = url.rfind(".m3u8")
                 if m3u8_index != -1:
-                    clean_url = url[:m3u8_index+5]  # +5保留.m3u8
-                    results.append(f"{name},{clean_url}")
+                    results.append(f"{name},{url[:m3u8_index+5]}")
+                    added = True
             
             # 如果两种格式都没选，或URL中没有这两种格式，则保留原URL
-            if (not self.extract_smil_var.get() and not self.extract_m3u8_var.get()) or \
-               (not ".smil" in url and not ".m3u8" in url):
+            if not added and (not extract_smil and not extract_m3u8 or 
+                             not (".smil" in url or ".m3u8" in url)):
                 results.append(f"{name},{url}")
         
         return results
@@ -228,13 +224,11 @@ class IPTVExtractor:
                 content = f.read()
             
             self.progress["value"] = 30
-            self.root.update_idletasks()
             
             # 提取频道信息
             results = self.extract_channels(content)
             
             self.progress["value"] = 60
-            self.root.update_idletasks()
             
             if not results:
                 self.show_error("未找到任何频道信息")
@@ -246,7 +240,6 @@ class IPTVExtractor:
                 f.write("\n".join(results))
             
             self.progress["value"] = 100
-            self.root.update_idletasks()
             
             # 显示处理结果
             self.show_results(results)
