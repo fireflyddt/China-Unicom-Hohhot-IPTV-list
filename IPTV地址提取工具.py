@@ -148,10 +148,9 @@ class IPTVExtractor:
             self.input_entry.delete(0, tk.END)
             self.input_entry.insert(0, file_path)
             
-            # 自动设置默认输出文件名（基于输入文件名）
-            input_name = os.path.splitext(os.path.basename(file_path))[0]
+            # 修改默认输出文件名为"全部频道.csv"
             output_dir = os.path.dirname(file_path)
-            default_output = os.path.join(output_dir, f"{input_name}_提取结果.csv")
+            default_output = os.path.join(output_dir, "全部频道.csv")
             
             self.output_entry.delete(0, tk.END)
             self.output_entry.insert(0, default_output)
@@ -159,17 +158,26 @@ class IPTVExtractor:
     def select_output_file(self):
         """选择输出文件"""
         file_path = filedialog.asksaveasfilename(
-            title="保存CSV文件",
+            title="保存文件",
             defaultextension=".csv",
-            filetypes=[("CSV文件", "*.csv"), ("文本文件", "*.txt"), ("所有文件", "*.*")]
+            initialfile="全部频道.csv",
+            filetypes=[
+                ("CSV文件", "*.csv"), 
+                ("文本文件", "*.txt"), 
+                ("M3U文件", "*.m3u"),
+                ("M3U8文件", "*.m3u8"),
+                ("所有文件", "*.*")
+            ]
         )
         if file_path:
             self.output_entry.delete(0, tk.END)
             self.output_entry.insert(0, file_path)
-    
+    # 跳过购物频道功能添加
     def extract_channels(self, content):
         """从内容中提取频道信息"""
         results = []
+        skipped_channels = []  # 记录跳过的频道
+        skipped_shopping_channels = []  # 新增：记录跳过的购物频道
         extract_smil = self.extract_smil_var.get()
         extract_m3u8 = self.extract_m3u8_var.get()
         
@@ -178,28 +186,40 @@ class IPTVExtractor:
         
         # 处理匹配结果
         for name, url in matches:
+            # 跳过包含"购物"关键词的频道
+            if "购物" in name:
+                skipped_shopping_channels.append(name)
+                continue
+                    
             added = False
+            
+            # 如果URL为空或不包含有效地址，则跳过并记录
+            if not url or url.startswith("/-?") or (not ".smil" in url and not ".m3u8" in url):
+                skipped_channels.append(name)
+                continue
             
             # 根据用户选择的格式进行处理
             if extract_smil and ".smil" in url:
                 smil_index = url.rfind(".smil")
                 if smil_index != -1:
-                    results.append(f"{name},{url[:smil_index+5]}")
+                    results.append((name, f"{name},{url[:smil_index+5]}"))
                     added = True
             
             if extract_m3u8 and ".m3u8" in url:
                 m3u8_index = url.rfind(".m3u8")
                 if m3u8_index != -1:
-                    results.append(f"{name},{url[:m3u8_index+5]}")
+                    results.append((name, f"{name},{url[:m3u8_index+5]}"))
                     added = True
             
             # 如果两种格式都没选，或URL中没有这两种格式，则保留原URL
             if not added and (not extract_smil and not extract_m3u8 or 
                              not (".smil" in url or ".m3u8" in url)):
-                results.append(f"{name},{url}")
+                results.append((name, f"{name},{url}"))
         
-        return results
-    
+        # 对结果进行排序
+        sorted_results = self.sort_channels(results)
+        
+        return sorted_results, skipped_channels, skipped_shopping_channels  # 返回结果和两种跳过的频道
     def start_processing(self):
         """在新线程中启动处理"""
         self.process_btn.config(state=tk.DISABLED)
@@ -208,7 +228,25 @@ class IPTVExtractor:
         
         # 启动新线程处理文件
         threading.Thread(target=self.process_files, daemon=True).start()
-    
+    def sort_channels(self, channels):
+        """对频道进行排序"""
+        cctv_hd_4k = []  # CCTV高清/4K频道
+        other_hd = []    # 其他高清频道
+        others = []      # 其他频道
+        
+        for name, full_info in channels:
+            # CCTV高清或4K频道
+            if "CCTV" in name and ("高清" in name or "4K" in name):
+                cctv_hd_4k.append(full_info)
+            # 其他高清频道
+            elif "高清" in name:
+                other_hd.append(full_info)
+            # 其他所有频道
+            else:
+                others.append(full_info)
+        
+        # 合并排序后的结果
+        return cctv_hd_4k + other_hd + others
     def process_files(self):
         """处理文件主逻辑"""
         input_path = self.input_entry.get()
@@ -226,36 +264,37 @@ class IPTVExtractor:
             self.progress["value"] = 30
             
             # 提取频道信息
-            results = self.extract_channels(content)
+            results, skipped_channels, skipped_shopping_channels = self.extract_channels(content)
             
             self.progress["value"] = 60
             
             if not results:
-                self.show_error("未找到任何频道信息")
+                self.show_error("未找到任何有效频道信息")
                 return
             
             # 保存为CSV（使用utf-8-sig解决Excel乱码问题）
             with open(output_path, "w", encoding="utf-8-sig") as f:
-                f.write("频道名称,播放地址\n")  # 添加标题行
+                #f.write("频道名称,播放地址\n")  # 添加标题行
                 f.write("\n".join(results))
             
             self.progress["value"] = 100
             
             # 显示处理结果
-            self.show_results(results)
+            self.show_results(results, skipped_channels, skipped_shopping_channels)
             
         except Exception as e:
             self.show_error(f"处理失败：\n{str(e)}")
         finally:
             self.process_btn.config(state=tk.NORMAL)
             self.status_var.set(f"处理完成，共提取 {len(results) if 'results' in locals() else 0} 条记录")
-    
-    def show_results(self, results):
+    def show_results(self, results, skipped_channels, skipped_shopping_channels):
         """在结果区域显示提取结果"""
         self.result_text.delete(1.0, tk.END)
         
         # 显示统计信息
-        self.result_text.insert(tk.END, f"成功提取 {len(results)} 条记录\n\n")
+        self.result_text.insert(tk.END, f"成功提取 {len(results)} 条记录\n")
+        self.result_text.insert(tk.END, f"跳过 {len(skipped_channels)} 条无效地址记录\n")
+        self.result_text.insert(tk.END, f"跳过 {len(skipped_shopping_channels)} 条购物频道\n\n")
         
         # 显示前5条记录作为示例
         self.result_text.insert(tk.END, "示例数据：\n")
@@ -265,6 +304,24 @@ class IPTVExtractor:
         # 如果有更多记录，显示省略信息
         if len(results) > 5:
             self.result_text.insert(tk.END, f"\n... 还有 {len(results)-5} 条记录\n")
+        
+        # 显示部分跳过的频道
+        if skipped_channels:
+            self.result_text.insert(tk.END, f"\n跳过的无效地址频道示例：\n")
+            for i, name in enumerate(skipped_channels[:3]):
+                self.result_text.insert(tk.END, f"{i+1}. {name}\n")
+            
+            if len(skipped_channels) > 3:
+                self.result_text.insert(tk.END, f"... 还有 {len(skipped_channels)-3} 个跳过的频道\n")
+        
+        # 显示部分跳过的购物频道
+        if skipped_shopping_channels:
+            self.result_text.insert(tk.END, f"\n跳过的购物频道示例：\n")
+            for i, name in enumerate(skipped_shopping_channels[:3]):
+                self.result_text.insert(tk.END, f"{i+1}. {name}\n")
+            
+            if len(skipped_shopping_channels) > 3:
+                self.result_text.insert(tk.END, f"... 还有 {len(skipped_shopping_channels)-3} 个购物频道\n")
         
         # 显示输出文件路径
         self.result_text.insert(tk.END, f"\n完整数据已保存至：\n{self.output_entry.get()}")
