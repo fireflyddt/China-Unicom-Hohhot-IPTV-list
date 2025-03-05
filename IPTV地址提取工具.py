@@ -230,23 +230,41 @@ class IPTVExtractor:
         threading.Thread(target=self.process_files, daemon=True).start()
     def sort_channels(self, channels):
         """对频道进行排序"""
-        cctv_hd_4k = []  # CCTV高清/4K频道
-        other_hd = []    # 其他高清频道
-        others = []      # 其他频道
+        # 创建不同类别的列表
+        categories = {
+            'cctv_hd_4k': [],  # CCTV高清/4K频道
+            'weishi_hd': [],   # 卫视高清频道
+            'bendi': [],       # 本地频道
+            'other_hd': [],    # 其他高清频道
+            'weishi': [],      # 卫视频道(不含高清)
+            'others': []       # 其他频道
+        }
         
+        # 对频道进行分类
         for name, full_info in channels:
             # CCTV高清或4K频道
             if "CCTV" in name and ("高清" in name or "4K" in name):
-                cctv_hd_4k.append(full_info)
+                categories['cctv_hd_4k'].append(full_info)
+            # 卫视高清频道
+            elif "卫视" in name and "高清" in name and "内蒙古" not in name:
+                categories['weishi_hd'].append(full_info)
+            # 本地区频道
+            elif ("内蒙古" in name and "高清" in name) or "呼和浩特" in name:
+                categories['bendi'].append(full_info)
             # 其他高清频道
-            elif "高清" in name:
-                other_hd.append(full_info)
+            elif "高清" in name and "卫视" not in name and "内蒙古" not in name:
+                categories['other_hd'].append(full_info)
+            # 卫视频道(不含高清)
+            elif "卫视" in name:
+                categories['weishi'].append(full_info)
             # 其他所有频道
             else:
-                others.append(full_info)
+                categories['others'].append(full_info)
         
-        # 合并排序后的结果
-        return cctv_hd_4k + other_hd + others
+        # 按照优先级顺序合并结果
+        return (categories['cctv_hd_4k'] + categories['weishi_hd'] + 
+                categories['bendi'] + categories['other_hd'] + 
+                categories['weishi'] + categories['others'])
     def process_files(self):
         """处理文件主逻辑"""
         input_path = self.input_entry.get()
