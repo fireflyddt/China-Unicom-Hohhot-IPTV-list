@@ -236,7 +236,7 @@ class IPTVExtractor:
             'weishi_hd': [],   # 卫视高清频道
             'bendi': [],       # 本地频道
             'other_hd': [],    # 其他高清频道
-            'weishi': [],      # 卫视频道(不含高清)
+            'weishi': [],      # 卫视标清(不含高清)
             'others': []       # 其他频道
         }
         
@@ -254,7 +254,7 @@ class IPTVExtractor:
             # 其他高清频道
             elif "高清" in name and "卫视" not in name and "内蒙古" not in name:
                 categories['other_hd'].append(full_info)
-            # 卫视频道(不含高清)
+            # 卫视标清(不含高清)
             elif "卫视" in name:
                 categories['weishi'].append(full_info)
             # 其他所有频道
@@ -265,6 +265,60 @@ class IPTVExtractor:
         return (categories['cctv_hd_4k'] + categories['weishi_hd'] + 
                 categories['bendi'] + categories['other_hd'] + 
                 categories['weishi'] + categories['others'])
+    def format_results_with_headers(self, results):
+        """为分类的结果添加标题行"""
+        # 创建不同类别的列表
+        categories = {
+            'cctv_hd_4k': [],  # CCTV高清/4K频道
+            'weishi_hd': [],   # 卫视高清频道
+            'bendi': [],       # 本地频道
+            'other_hd': [],    # 其他高清频道
+            'weishi': [],      # 卫视标清(不含高清)
+            'others': []       # 其他频道
+        }
+        
+        # 分类标题映射
+        category_titles = {
+            'cctv_hd_4k': '央视高清,#genre#',
+            'weishi_hd': '卫视高清,#genre#',
+            'bendi': '本地频道,#genre#',
+            'other_hd': '其他高清,#genre#',
+            'weishi': '卫视标清,#genre#',
+            'others': '其他频道,#genre#'
+        }
+        
+        # 对频道进行分类
+        for item in results:
+            name = item.split(',')[0]  # 从结果中提取频道名称
+            
+            # CCTV高清或4K频道
+            if "CCTV" in name and ("高清" in name or "4K" in name):
+                categories['cctv_hd_4k'].append(item)
+            # 卫视高清频道
+            elif "卫视" in name and "高清" in name and "内蒙古" not in name:
+                categories['weishi_hd'].append(item)
+            # 本地区频道
+            elif ("内蒙古" in name and "高清" in name) or "呼和浩特" in name:
+                categories['bendi'].append(item)
+            # 其他高清频道
+            elif "高清" in name and "卫视" not in name and "内蒙古" not in name:
+                categories['other_hd'].append(item)
+            # 卫视标清(不含高清)
+            elif "卫视" in name:
+                categories['weishi'].append(item)
+            # 其他所有频道
+            else:
+                categories['others'].append(item)
+        
+        # 合并结果，添加分类标题
+        formatted_results = []
+        for category, title in category_titles.items():
+            if categories[category]:  # 只有当该分类有频道时才添加标题
+                formatted_results.append(title)
+                formatted_results.extend(categories[category])
+                # 不添加空行，保持格式一致性
+        
+        return formatted_results
     def process_files(self):
         """处理文件主逻辑"""
         input_path = self.input_entry.get()
@@ -290,10 +344,12 @@ class IPTVExtractor:
                 self.show_error("未找到任何有效频道信息")
                 return
             
+            # 获取带有分类标题的格式化结果
+            formatted_results = self.format_results_with_headers(results)
+            
             # 保存为CSV（使用utf-8-sig解决Excel乱码问题）
             with open(output_path, "w", encoding="utf-8-sig") as f:
-                #f.write("频道名称,播放地址\n")  # 添加标题行
-                f.write("\n".join(results))
+                f.write("\n".join(formatted_results))
             
             self.progress["value"] = 100
             
