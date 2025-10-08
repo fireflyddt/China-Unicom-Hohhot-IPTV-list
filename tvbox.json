@@ -1,1 +1,0 @@
-{"spider":"","lives":[{"name":"直播","type":0,"url":"http://tvbox.mesier.cc/live.php","epg":"http://tvbox.mesier.cc/epg.php?ch={name}&date={date}"},{"group":"redirect","channels":[{"name":"live","urls":[]}],"epg":"http://tvbox.222.cc/epg.php"}],"rules":[],"sites":[],"parses":[],"flags":[],"wallpaper":""}
